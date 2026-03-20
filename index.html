@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Интерактивное Векторное Поле: Строгий Стиль</title>
+    <title>Матан пилот</title>
     <style>
         :root {
             --bg-color: #1e1e1e;
@@ -29,22 +29,39 @@
             backdrop-filter: blur(10px);
             border: 1px solid #444; border-radius: 12px;
             padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-            width: 320px; z-index: 10;
+            width: 340px; z-index: 10;
         }
 
-        h1 { font-size: 1.2rem; margin-top: 0; color: var(--accent); letter-spacing: 1px; }
-        p { font-size: 0.85rem; color: #aaa; margin-bottom: 15px; line-height: 1.4; }
+        h1 { font-size: 1.4rem; margin-top: 0; color: var(--accent); letter-spacing: 1px; }
+        p { font-size: 0.85rem; color: #aaa; margin-bottom: 20px; line-height: 1.4; }
         
         .control-group { margin-bottom: 15px; }
-        label { display: block; font-size: 0.9rem; margin-bottom: 5px; }
+        label { display: block; font-size: 0.9rem; margin-bottom: 5px; color: #ccc; }
+        
         select, input[type="range"] {
             width: 100%; background: #2a2a2a; color: white;
             border: 1px solid #555; padding: 6px; border-radius: 4px;
-            font-family: inherit; margin-bottom: 5px;
+            font-family: inherit; margin-bottom: 5px; outline: none;
         }
+        
         input[type="range"] { accent-color: var(--accent); }
 
-        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        /* Стили для кастомного ввода */
+        .custom-eq-container {
+            background: #222; border: 1px solid #444; border-radius: 6px; padding: 10px; margin-top: 10px;
+        }
+        .eq-row { display: flex; align-items: center; margin-bottom: 8px; }
+        .eq-row:last-child { margin-bottom: 0; }
+        .eq-row span { color: var(--accent); font-weight: bold; width: 65px; font-size: 0.9rem; }
+        .eq-input {
+            flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #555;
+            padding: 5px 8px; border-radius: 4px; font-family: inherit; outline: none; transition: 0.2s;
+        }
+        .eq-input:focus { border-color: var(--accent); }
+        .eq-error { border-color: var(--red) !important; background: rgba(252, 98, 85, 0.1); }
+        .small-hint { font-size: 0.7rem; color: #888; margin-top: 5px; text-align: right; }
+
+        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
         button {
             flex: 1; padding: 8px; font-family: inherit; font-weight: bold;
             border: none; border-radius: 4px; cursor: pointer; transition: 0.2s;
@@ -61,17 +78,29 @@
 
     <div id="ui-container">
         <h1>Матан пилот</h1>
-        <p>Приложенька для анимации действия вихревого поля на отдельные точки (клик) и на замкнутые функции ("бросить фигуру", фигура здесь круг)</p>
+        <p>Приложенька для анимации действия вихревого поля на отдельные точки (клик) и на замкнутые функции ("бросить фигуру", фигура здесь круг).</p>
         
         <div class="control-group">
-            <label>Уравнение поля (dx/dt, dy/dt):</label>
-            <select id="equation">
-                <option value="saddle">Седло: [x, -y]</option>
-                <option value="vortex">Вихрь: [-y, x]</option>
-                <option value="spiral">Спираль: [x - y, x + y]</option>
-                <option value="waves">Волны: [sin(y), cos(x)]</option>
-                <option value="complex">Нелинейное: [sin(x)*cos(y), -cos(x)*sin(y)]</option>
+            <label>Пресеты полей:</label>
+            <select id="preset-select">
+                <option value="vortex">Вихрь</option>
+                <option value="saddle">Седло</option>
+                <option value="spiral">Спираль</option>
+                <option value="waves">Волны</option>
+                <option value="complex">Нелинейное</option>
             </select>
+
+            <div class="custom-eq-container">
+                <div class="eq-row">
+                    <span>dx/dt =</span>
+                    <input type="text" id="eq-x" class="eq-input" value="-y">
+                </div>
+                <div class="eq-row">
+                    <span>dy/dt =</span>
+                    <input type="text" id="eq-y" class="eq-input" value="x">
+                </div>
+                <div class="small-hint">* Используйте + - * / ^ sin() cos()</div>
+            </div>
         </div>
 
         <div class="control-group">
@@ -100,18 +129,78 @@
         let shapes = []; 
         let isDrawing = false;
         
-        const eqSelect = document.getElementById('equation');
+        // Текущая математическая функция поля
+        let currentVectorField = null;
+
+        // Элементы интерфейса
+        const presetSelect = document.getElementById('preset-select');
+        const inputX = document.getElementById('eq-x');
+        const inputY = document.getElementById('eq-y');
         const speedInput = document.getElementById('speed');
         const speedVal = document.getElementById('speed-val');
 
-        const fields = {
-            saddle: (x, y) => ({ dx: x, dy: -y }),
-            vortex: (x, y) => ({ dx: -y, dy: x }),
-            spiral: (x, y) => ({ dx: -y - 0.2*x, dy: x - 0.2*y }),
-            waves:  (x, y) => ({ dx: Math.sin(y), dy: Math.cos(x) }),
-            complex: (x, y) => ({ dx: Math.sin(x) * Math.cos(y), dy: -Math.cos(x) * Math.sin(y) })
+        // Строковые пресеты
+        const presets = {
+            vortex: { x: '-y', y: 'x' },
+            saddle: { x: 'x', y: '-y' },
+            spiral: { x: '-y - 0.2*x', y: 'x - 0.2*y' },
+            waves:  { x: 'sin(y)', y: 'cos(x)' },
+            complex: { x: 'sin(x)*cos(y)', y: '-cos(x)*sin(y)' }
         };
 
+        // --- Парсер математики ---
+        function parseMathString(str) {
+            let parsed = str.toLowerCase();
+            // Замена математических функций на синтаксис JS
+            const funcs = ['sin', 'cos', 'tan', 'exp', 'log', 'abs', 'sqrt'];
+            funcs.forEach(f => {
+                const regex = new RegExp('\\b' + f + '\\b', 'g');
+                parsed = parsed.replace(regex, 'Math.' + f);
+            });
+            // Возведение в степень x^2 -> x**2
+            parsed = parsed.replace(/\^/g, '**');
+            // Константы
+            parsed = parsed.replace(/\bpi\b/g, 'Math.PI').replace(/\be\b/g, 'Math.E');
+            return parsed;
+        }
+
+        function compileField() {
+            try {
+                const safeX = parseMathString(inputX.value);
+                const safeY = parseMathString(inputY.value);
+                
+                // Создаем функцию на лету
+                const newFunc = new Function('x', 'y', `return { dx: ${safeX}, dy: ${safeY} };`);
+                
+                // Тестовый вызов для проверки ошибок синтаксиса
+                newFunc(1, 1); 
+
+                currentVectorField = newFunc;
+                inputX.classList.remove('eq-error');
+                inputY.classList.remove('eq-error');
+                
+                // Очищаем хвосты при смене поля
+                particles = []; shapes = [];
+            } catch (error) {
+                // Если пользователь ошибся в синтаксисе (например, забыл закрыть скобку)
+                console.warn("Ошибка в уравнении", error);
+                inputX.classList.add('eq-error');
+                inputY.classList.add('eq-error');
+            }
+        }
+
+        // Слушатели для инпутов кастомного уравнения
+        inputX.addEventListener('input', compileField);
+        inputY.addEventListener('input', compileField);
+
+        presetSelect.addEventListener('change', () => {
+            const pr = presets[presetSelect.value];
+            inputX.value = pr.x;
+            inputY.value = pr.y;
+            compileField();
+        });
+
+        // Базовая настройка канваса
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
@@ -127,18 +216,15 @@
             return `hsl(${Math.max(0, h)}, 80%, 60%)`;
         }
 
-        // --- Строгие координатные оси (без цифр) ---
+        // --- Отрисовка ---
         function drawAxes() {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
             const origin = toScreen(0, 0);
 
-            // Ось X
             ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(0, origin.y); ctx.lineTo(width, origin.y); ctx.stroke();
-            // Ось Y
             ctx.beginPath(); ctx.moveTo(origin.x, 0); ctx.lineTo(origin.x, height); ctx.stroke();
 
-            // Засечки (с шагом 1 математическая единица)
             const minX = Math.floor(-width / 2 / mathScale);
             const maxX = Math.ceil(width / 2 / mathScale);
             const minY = Math.floor(-height / 2 / mathScale);
@@ -179,23 +265,23 @@
         }
 
         function drawVectorField() {
+            if (!currentVectorField) return;
             const step = 0.5;
             const startX = -Math.floor((width/2)/mathScale);
             const endX = Math.ceil((width/2)/mathScale);
             const startY = -Math.floor((height/2)/mathScale);
             const endY = Math.ceil((height/2)/mathScale);
-            const getVector = fields[eqSelect.value];
 
             for (let x = startX; x <= endX; x += step) {
                 for (let y = startY; y <= endY; y += step) {
-                    const { dx, dy } = getVector(x, y);
+                    const { dx, dy } = currentVectorField(x, y);
                     const magnitude = Math.sqrt(dx*dx + dy*dy);
                     if (magnitude > 0.05) drawVector(x, y, dx, dy, magnitude);
                 }
             }
         }
 
-        // --- Класс непрерывной Фигуры (Строгий стиль) ---
+        // --- Классы физики ---
         class FlowingShape {
             constructor(cx, cy, radius) {
                 this.points = [];
@@ -207,9 +293,10 @@
                 this.color = colors[Math.floor(Math.random() * colors.length)];
             }
 
-            update(dt, getVector) {
+            update(dt) {
+                if(!currentVectorField) return;
                 this.points.forEach(p => {
-                    const { dx, dy } = getVector(p.x, p.y);
+                    const { dx, dy } = currentVectorField(p.x, p.y);
                     p.x += dx * dt;
                     p.y += dy * dt;
                 });
@@ -219,12 +306,10 @@
                 if (this.points.length === 0) return;
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 2.5; 
-                // Убрали свечение (shadowColor и shadowBlur), чтобы фигура была строгой
 
                 ctx.beginPath();
                 const start = toScreen(this.points[0].x, this.points[0].y);
                 ctx.moveTo(start.x, start.y);
-                
                 for(let i = 1; i < this.points.length; i++) {
                     const scr = toScreen(this.points[i].x, this.points[i].y);
                     ctx.lineTo(scr.x, scr.y);
@@ -239,8 +324,9 @@
                 this.x = x; this.y = y; this.age = 0;
                 this.lifespan = 150 + Math.random() * 100;
             }
-            update(dt, getVector) {
-                const { dx, dy } = getVector(this.x, this.y);
+            update(dt) {
+                if(!currentVectorField) return 0;
+                const { dx, dy } = currentVectorField(this.x, this.y);
                 this.x += dx * dt; this.y += dy * dt;
                 this.age++;
                 return Math.sqrt(dx*dx + dy*dy);
@@ -252,6 +338,7 @@
             }
         }
 
+        // Управление
         canvas.addEventListener('mousedown', (e) => { isDrawing = true; addParticles(e); });
         canvas.addEventListener('mousemove', (e) => { if (isDrawing) addParticles(e); });
         window.addEventListener('mouseup', () => { isDrawing = false; });
@@ -270,12 +357,13 @@
         });
 
         document.getElementById('btn-clear').addEventListener('click', () => {
-            particles = [];
-            shapes = [];
+            particles = []; shapes = [];
         });
 
         speedInput.addEventListener('input', (e) => speedVal.innerText = e.target.value);
-        eqSelect.addEventListener('change', () => { particles = []; shapes = []; });
+
+        // Инициализация первого поля
+        compileField();
 
         function animate() {
             ctx.fillStyle = 'rgba(30, 30, 30, 0.15)';
@@ -285,11 +373,10 @@
             drawVectorField();
 
             const dt = parseFloat(speedInput.value);
-            const getVector = fields[eqSelect.value];
 
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
-                let mag = p.update(dt, getVector);
+                let mag = p.update(dt);
                 p.draw(mag);
                 if (p.age > p.lifespan || Math.abs(p.x) > width/mathScale || Math.abs(p.y) > height/mathScale) {
                     particles.splice(i, 1);
@@ -297,7 +384,7 @@
             }
 
             for(let shape of shapes) {
-                shape.update(dt, getVector);
+                shape.update(dt);
                 shape.draw();
             }
 
