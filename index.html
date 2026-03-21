@@ -21,7 +21,7 @@
             color: var(--text-color);
         }
 
-        canvas { display: block; }
+        canvas { display: block; touch-action: none; /* Запрещаем скролл экрана при рисовании на телефоне */ }
 
         #ui-container {
             position: absolute; top: 20px; left: 20px;
@@ -29,8 +29,18 @@
             backdrop-filter: blur(10px);
             border: 1px solid #444; border-radius: 12px;
             padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.7);
-            width: 340px; z-index: 10;
+            /* Адаптация под телефоны */
+            width: 90%; 
+            max-width: 340px; 
+            box-sizing: border-box;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 10;
         }
+
+        /* Кастомный скроллбар для панели на телефонах */
+        #ui-container::-webkit-scrollbar { width: 5px; }
+        #ui-container::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; }
 
         h1 { font-size: 1.4rem; margin-top: 0; color: var(--accent); letter-spacing: 1px; }
         p { font-size: 0.85rem; color: #aaa; margin-bottom: 20px; line-height: 1.4; }
@@ -41,34 +51,35 @@
         select, input[type="range"] {
             width: 100%; background: #2a2a2a; color: white;
             border: 1px solid #555; padding: 6px; border-radius: 4px;
-            font-family: inherit; margin-bottom: 5px; outline: none;
+            font-family: inherit; margin-bottom: 5px; outline: none; box-sizing: border-box;
         }
         
         input[type="range"] { accent-color: var(--accent); }
 
-        /* Стили для кастомного ввода */
         .custom-eq-container {
             background: #222; border: 1px solid #444; border-radius: 6px; padding: 10px; margin-top: 10px;
         }
         .eq-row { display: flex; align-items: center; margin-bottom: 8px; }
         .eq-row:last-child { margin-bottom: 0; }
-        .eq-row span { color: var(--accent); font-weight: bold; width: 65px; font-size: 0.9rem; }
+        .eq-row span { color: var(--accent); font-weight: bold; width: 65px; font-size: 0.9rem; flex-shrink: 0;}
         .eq-input {
             flex: 1; background: #1a1a1a; color: #fff; border: 1px solid #555;
-            padding: 5px 8px; border-radius: 4px; font-family: inherit; outline: none; transition: 0.2s;
+            padding: 5px 8px; border-radius: 4px; font-family: inherit; outline: none; transition: 0.2s; min-width: 0;
         }
         .eq-input:focus { border-color: var(--accent); }
         .eq-error { border-color: var(--red) !important; background: rgba(252, 98, 85, 0.1); }
         .small-hint { font-size: 0.7rem; color: #888; margin-top: 5px; text-align: right; }
 
-        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        .btn-group { display: flex; gap: 8px; margin-top: 20px; }
         button {
-            flex: 1; padding: 8px; font-family: inherit; font-weight: bold;
+            padding: 8px; font-family: inherit; font-weight: bold;
             border: none; border-radius: 4px; cursor: pointer; transition: 0.2s;
         }
-        #btn-shape { background-color: var(--green); color: #111; }
+        #btn-shape { background-color: var(--green); color: #111; flex: 1; }
         #btn-shape:hover { background-color: #94d477; }
-        #btn-clear { background-color: var(--red); color: white; }
+        #btn-settings { background-color: #444; color: white; flex: 0.2; }
+        #btn-settings:hover { background-color: #555; }
+        #btn-clear { background-color: var(--red); color: white; flex: 1; }
         #btn-clear:hover { background-color: #ff7568; }
 
         .hint { margin-top: 15px; font-size: 0.8rem; color: var(--yellow); text-align: center; }
@@ -78,13 +89,13 @@
 
     <div id="ui-container">
         <h1>Матан пилот</h1>
-        <p>Приложенька для анимации действия вихревого поля на отдельные точки (клик) и на замкнутые функции ("бросить фигуру", фигура здесь круг).</p>
+        <p>Приложение для анимации действия вихревого поля на отдельные точки (клик) и на замкнутые функции ("бросить фигуру", фигура круг)    </p>
         
         <div class="control-group">
             <label>Пресеты полей:</label>
             <select id="preset-select">
                 <option value="vortex">Вихрь</option>
-                <option value="saddle">Седло</option>
+                <option value="pendulum">Маятник</option>
                 <option value="spiral">Спираль</option>
                 <option value="waves">Волны</option>
                 <option value="complex">Нелинейное</option>
@@ -110,7 +121,22 @@
 
         <div class="btn-group">
             <button id="btn-shape">Бросить фигуру</button>
+            <button id="btn-settings" title="Настройки кастомной фигуры">⚙️</button>
             <button id="btn-clear">Очистить</button>
+        </div>
+
+        <!-- Скрывающаяся панель для кастомной фигуры -->
+        <div id="shape-panel" class="custom-eq-container" style="display: none;">
+            <label style="font-size: 0.8rem; color: var(--green);">Параметрическая функция</label>
+            <div class="eq-row">
+                <span>x(t) =</span>
+                <input type="text" id="shape-x" class="eq-input" value="cos(t)">
+            </div>
+            <div class="eq-row">
+                <span>y(t) =</span>
+                <input type="text" id="shape-y" class="eq-input" value="sin(t)">
+            </div>
+            <div class="small-hint">0<=t<=2pi</div>
         </div>
 
         <div class="hint">ЛКМ - рисовать линии потока.</div>
@@ -129,37 +155,37 @@
         let shapes = []; 
         let isDrawing = false;
         
-        // Текущая математическая функция поля
         let currentVectorField = null;
+        let currentShapeXFunc = null;
+        let currentShapeYFunc = null;
 
-        // Элементы интерфейса
         const presetSelect = document.getElementById('preset-select');
         const inputX = document.getElementById('eq-x');
         const inputY = document.getElementById('eq-y');
         const speedInput = document.getElementById('speed');
         const speedVal = document.getElementById('speed-val');
+        
+        const shapeInputX = document.getElementById('shape-x');
+        const shapeInputY = document.getElementById('shape-y');
+        const shapePanel = document.getElementById('shape-panel');
+        const btnSettings = document.getElementById('btn-settings');
 
-        // Строковые пресеты
         const presets = {
             vortex: { x: '-y', y: 'x' },
-            saddle: { x: 'x', y: '-y' },
+            pendulum: { x: 'y', y: '-sin(x)' },
             spiral: { x: '-y - 0.2*x', y: 'x - 0.2*y' },
             waves:  { x: 'sin(y)', y: 'cos(x)' },
             complex: { x: 'sin(x)*cos(y)', y: '-cos(x)*sin(y)' }
         };
 
-        // --- Парсер математики ---
         function parseMathString(str) {
             let parsed = str.toLowerCase();
-            // Замена математических функций на синтаксис JS
             const funcs = ['sin', 'cos', 'tan', 'exp', 'log', 'abs', 'sqrt'];
             funcs.forEach(f => {
                 const regex = new RegExp('\\b' + f + '\\b', 'g');
                 parsed = parsed.replace(regex, 'Math.' + f);
             });
-            // Возведение в степень x^2 -> x**2
             parsed = parsed.replace(/\^/g, '**');
-            // Константы
             parsed = parsed.replace(/\bpi\b/g, 'Math.PI').replace(/\be\b/g, 'Math.E');
             return parsed;
         }
@@ -168,30 +194,41 @@
             try {
                 const safeX = parseMathString(inputX.value);
                 const safeY = parseMathString(inputY.value);
-                
-                // Создаем функцию на лету
                 const newFunc = new Function('x', 'y', `return { dx: ${safeX}, dy: ${safeY} };`);
-                
-                // Тестовый вызов для проверки ошибок синтаксиса
                 newFunc(1, 1); 
 
                 currentVectorField = newFunc;
                 inputX.classList.remove('eq-error');
                 inputY.classList.remove('eq-error');
-                
-                // Очищаем хвосты при смене поля
                 particles = []; shapes = [];
             } catch (error) {
-                // Если пользователь ошибся в синтаксисе (например, забыл закрыть скобку)
-                console.warn("Ошибка в уравнении", error);
                 inputX.classList.add('eq-error');
                 inputY.classList.add('eq-error');
             }
         }
 
-        // Слушатели для инпутов кастомного уравнения
+        function compileShape() {
+            try {
+                const sX = parseMathString(shapeInputX.value);
+                const sY = parseMathString(shapeInputY.value);
+                const funcX = new Function('t', `return ${sX};`);
+                const funcY = new Function('t', `return ${sY};`);
+                funcX(0); funcY(0);
+
+                currentShapeXFunc = funcX;
+                currentShapeYFunc = funcY;
+                shapeInputX.classList.remove('eq-error');
+                shapeInputY.classList.remove('eq-error');
+            } catch (error) {
+                shapeInputX.classList.add('eq-error');
+                shapeInputY.classList.add('eq-error');
+            }
+        }
+
         inputX.addEventListener('input', compileField);
         inputY.addEventListener('input', compileField);
+        shapeInputX.addEventListener('input', compileShape);
+        shapeInputY.addEventListener('input', compileShape);
 
         presetSelect.addEventListener('change', () => {
             const pr = presets[presetSelect.value];
@@ -200,7 +237,10 @@
             compileField();
         });
 
-        // Базовая настройка канваса
+        btnSettings.addEventListener('click', () => {
+            shapePanel.style.display = shapePanel.style.display === 'none' ? 'block' : 'none';
+        });
+
         function resize() {
             width = canvas.width = window.innerWidth;
             height = canvas.height = window.innerHeight;
@@ -216,7 +256,6 @@
             return `hsl(${Math.max(0, h)}, 80%, 60%)`;
         }
 
-        // --- Отрисовка ---
         function drawAxes() {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
             const origin = toScreen(0, 0);
@@ -281,13 +320,18 @@
             }
         }
 
-        // --- Классы физики ---
         class FlowingShape {
-            constructor(cx, cy, radius) {
+            constructor(cx, cy) {
                 this.points = [];
                 const numPoints = 150; 
                 for(let i = 0; i < Math.PI * 2; i += (Math.PI * 2) / numPoints) {
-                    this.points.push({ x: cx + Math.cos(i)*radius, y: cy + Math.sin(i)*radius });
+                    let px = cx;
+                    let py = cy;
+                    if(currentShapeXFunc && currentShapeYFunc) {
+                        px += currentShapeXFunc(i);
+                        py += currentShapeYFunc(i);
+                    }
+                    this.points.push({ x: px, y: py });
                 }
                 const colors = ['#58c4dd', '#fc6255', '#83c167', '#ffff00'];
                 this.color = colors[Math.floor(Math.random() * colors.length)];
@@ -338,22 +382,33 @@
             }
         }
 
-        // Управление
-        canvas.addEventListener('mousedown', (e) => { isDrawing = true; addParticles(e); });
-        canvas.addEventListener('mousemove', (e) => { if (isDrawing) addParticles(e); });
-        window.addEventListener('mouseup', () => { isDrawing = false; });
-
-        function addParticles(e) {
-            const mathPos = toMath(e.clientX, e.clientY);
+        function addParticles(x, y) {
+            const mathPos = toMath(x, y);
             for(let i=0; i<3; i++) {
                 particles.push(new Particle(mathPos.x + (Math.random()-0.5)*0.2, mathPos.y + (Math.random()-0.5)*0.2));
             }
         }
 
+        // Мышь
+        canvas.addEventListener('mousedown', (e) => { isDrawing = true; addParticles(e.clientX, e.clientY); });
+        canvas.addEventListener('mousemove', (e) => { if (isDrawing) addParticles(e.clientX, e.clientY); });
+        window.addEventListener('mouseup', () => { isDrawing = false; });
+
+        // Сенсорные экраны (телефоны)
+        canvas.addEventListener('touchstart', (e) => { 
+            isDrawing = true; 
+            addParticles(e.touches[0].clientX, e.touches[0].clientY); 
+        });
+        canvas.addEventListener('touchmove', (e) => { 
+            if(isDrawing) addParticles(e.touches[0].clientX, e.touches[0].clientY); 
+            e.preventDefault(); // чтобы экран не скроллился при рисовании
+        }, { passive: false });
+        window.addEventListener('touchend', () => { isDrawing = false; });
+
         document.getElementById('btn-shape').addEventListener('click', () => {
             const cx = (Math.random() - 0.5) * 4;
             const cy = (Math.random() - 0.5) * 4;
-            shapes.push(new FlowingShape(cx, cy, 1.0));
+            shapes.push(new FlowingShape(cx, cy));
         });
 
         document.getElementById('btn-clear').addEventListener('click', () => {
@@ -362,8 +417,8 @@
 
         speedInput.addEventListener('input', (e) => speedVal.innerText = e.target.value);
 
-        // Инициализация первого поля
         compileField();
+        compileShape();
 
         function animate() {
             ctx.fillStyle = 'rgba(30, 30, 30, 0.15)';
